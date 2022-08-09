@@ -1,5 +1,4 @@
 
-import numpy as np
 from morphsnakes import (morphological_chan_vese,
                          morphological_geodesic_active_contour,
                          inverse_gaussian_gradient,
@@ -8,14 +7,24 @@ from numpy.testing import assert_array_equal
 import pytest
 
 
-def gaussian_blob():
+@pytest.fixture(scope="module", params=["numpy"])#, "cupy"])
+def np(request):
+    if request.param == "numpy":
+        import numpy as np
+        yield np
+    elif request.param == "cupy":
+        np = pytest.importorskip('cupy')
+        yield np
+
+
+def gaussian_blob(np):
 
     coords = np.mgrid[-5:6, -5:6]
     sqrdistances = (coords ** 2).sum(0)
     return np.exp(-sqrdistances / 10)
 
 
-def test_morphsnakes_incorrect_image_shape():
+def test_morphsnakes_incorrect_image_shape(np):
     img = np.zeros((10, 10, 3))
     ls = np.zeros((10, 9))
 
@@ -26,7 +35,7 @@ def test_morphsnakes_incorrect_image_shape():
                                               init_level_set=ls)
 
 
-def test_morphsnakes_incorrect_ndim():
+def test_morphsnakes_incorrect_ndim(np):
 
     img = np.zeros((4, 4, 4, 4))
     ls = np.zeros((4, 4, 4, 4))
@@ -38,7 +47,7 @@ def test_morphsnakes_incorrect_ndim():
                                               init_level_set=ls)
 
 
-def test_morphsnakes_black():
+def test_morphsnakes_black(np):
 
     img = np.zeros((11, 11))
     ls = circle_level_set(img.shape, (5, 5), 3)
@@ -62,7 +71,7 @@ def test_morphsnakes_black():
     assert acwe_ls.dtype == gac_ls.dtype == gac_ls2.dtype == np.int8
 
 
-def test_morphsnakes_simple_shape_chan_vese():
+def test_morphsnakes_simple_shape_chan_vese(np):
 
     img = gaussian_blob()
     ls1 = circle_level_set(img.shape, (5, 5), 3)
@@ -76,7 +85,7 @@ def test_morphsnakes_simple_shape_chan_vese():
     assert acwe_ls1.dtype == acwe_ls2.dtype == np.int8
 
 
-def test_morphsnakes_simple_shape_geodesic_active_contour():
+def test_morphsnakes_simple_shape_geodesic_active_contour(np):
 
     img = np.float_(circle_level_set((11, 11), (5, 5), 3.5))
     gimg = inverse_gaussian_gradient(img, alpha=10.0, sigma=1.0)
@@ -104,7 +113,7 @@ def test_morphsnakes_simple_shape_geodesic_active_contour():
     assert gac_ls.dtype == np.int8
 
 
-def test_init_level_sets():
+def test_init_level_sets(np):
 
     image = np.zeros((6, 6))
     checkerboard_ls = morphological_chan_vese(image, 0, 'checkerboard')
@@ -140,7 +149,7 @@ def test_init_level_sets():
     assert_array_equal(ellipsoid_ls, ellipsoid_ref)
 
 
-def test_morphsnakes_3d():
+def test_morphsnakes_3d(np):
 
     image = np.zeros((7, 7, 7))
 

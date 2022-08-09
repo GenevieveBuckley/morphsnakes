@@ -78,32 +78,37 @@ class _fcycle(object):
         f = next(self.funcs)
         return f(*args, **kwargs)
 
+def _2d_SI():
+    # SI and IS operators for 2D.
+    _P2 = [np.eye(3),
+        np.array([[0, 1, 0]] * 3),
+        np.flipud(np.eye(3)),
+        np.rot90(np.array([[0, 1, 0]] * 3))]
+    return _P2
 
-# SI and IS operators for 2D and 3D.
-_P2 = [np.eye(3),
-       np.array([[0, 1, 0]] * 3),
-       np.flipud(np.eye(3)),
-       np.rot90([[0, 1, 0]] * 3)]
-_P3 = [np.zeros((3, 3, 3)) for i in range(9)]
 
-_P3[0][:, :, 1] = 1
-_P3[1][:, 1, :] = 1
-_P3[2][1, :, :] = 1
-_P3[3][:, [0, 1, 2], [0, 1, 2]] = 1
-_P3[4][:, [0, 1, 2], [2, 1, 0]] = 1
-_P3[5][[0, 1, 2], :, [0, 1, 2]] = 1
-_P3[6][[0, 1, 2], :, [2, 1, 0]] = 1
-_P3[7][[0, 1, 2], [0, 1, 2], :] = 1
-_P3[8][[0, 1, 2], [2, 1, 0], :] = 1
+def _3d_SI():
+    # SI and IS operators for 3D.
+    _P3 = [np.zeros((3, 3, 3)) for i in range(9)]
+    _P3[0][:, :, 1] = 1
+    _P3[1][:, 1, :] = 1
+    _P3[2][1, :, :] = 1
+    _P3[3][:, [0, 1, 2], [0, 1, 2]] = 1
+    _P3[4][:, [0, 1, 2], [2, 1, 0]] = 1
+    _P3[5][[0, 1, 2], :, [0, 1, 2]] = 1
+    _P3[6][[0, 1, 2], :, [2, 1, 0]] = 1
+    _P3[7][[0, 1, 2], [0, 1, 2], :] = 1
+    _P3[8][[0, 1, 2], [2, 1, 0], :] = 1
+    return _P3
 
 
 def sup_inf(u):
     """SI operator."""
 
     if np.ndim(u) == 2:
-        P = _P2
+        P = _2d_SI()
     elif np.ndim(u) == 3:
-        P = _P3
+        P = _3d_SI()
     else:
         raise ValueError("u has an invalid number of dimensions "
                          "(should be 2 or 3)")
@@ -112,16 +117,16 @@ def sup_inf(u):
     for P_i in P:
         erosions.append(ndi.binary_erosion(u, P_i))
 
-    return np.array(erosions, dtype=np.int8).max(0)
+    return np.array(erosions, dtype="int8").max(0)
 
 
 def inf_sup(u):
     """IS operator."""
 
     if np.ndim(u) == 2:
-        P = _P2
+        P = _2d_SI()
     elif np.ndim(u) == 3:
-        P = _P3
+        P = _3d_SI()
     else:
         raise ValueError("u has an invalid number of dimensions "
                          "(should be 2 or 3)")
@@ -130,7 +135,7 @@ def inf_sup(u):
     for P_i in P:
         dilations.append(ndi.binary_dilation(u, P_i))
 
-    return np.array(dilations, dtype=np.int8).min(0)
+    return np.array(dilations, dtype="int8").min(0)
 
 
 _curvop = _fcycle([lambda u: sup_inf(inf_sup(u)),   # SIoIS
@@ -199,9 +204,9 @@ def circle_level_set(image_shape, center=None, radius=None):
         radius = min(image_shape) * 3.0 / 8.0
 
     grid = np.mgrid[[slice(i) for i in image_shape]]
-    grid = (grid.T - center).T
+    grid = (grid.T - np.array(center)).T
     phi = radius - np.sqrt(np.sum((grid)**2, 0))
-    res = np.int8(phi > 0)
+    res = (phi > 0).astype('int8')
     return res
 
 
@@ -260,7 +265,7 @@ def ellipsoid_level_set(image_shape, center=None, semi_axis=None):
     else:
         raise ValueError("`image_shape` must be a 2- or 3-tuple.")
 
-    res = np.int8(phi > 0)
+    res = (phi > 0).astype('int8')
     return res
 
 
@@ -288,7 +293,7 @@ def checkerboard_level_set(image_shape, square_size=5):
     grid = [(grid_i // square_size) & 1 for grid_i in grid]
 
     checkerboard = np.bitwise_xor.reduce(grid, axis=0)
-    res = np.int8(checkerboard)
+    res = checkerboard.astype('int8')
     return res
 
 
@@ -400,7 +405,7 @@ def morphological_chan_vese(image, iterations, init_level_set='checkerboard',
 
     _check_input(image, init_level_set)
 
-    u = np.int8(init_level_set > 0)
+    u = (init_level_set > 0).astype('int8')
 
     iter_callback(u)
 
@@ -412,7 +417,7 @@ def morphological_chan_vese(image, iterations, init_level_set='checkerboard',
         c1 = (image * u).sum() / float(u.sum() + 1e-8)
 
         # Image attachment
-        du = np.gradient(u)
+        du = np.array(np.gradient(u))
         abs_du = np.abs(du).sum(0)
         aux = abs_du * (lambda1 * (image - c1)**2 - lambda2 * (image - c0)**2)
 
@@ -509,6 +514,10 @@ def morphological_geodesic_active_contour(gimage, iterations,
            Transactions on Pattern Analysis and Machine Intelligence (PAMI),
            2014, DOI 10.1109/TPAMI.2013.106
     """
+    if "cupy" in str(type(image)):
+        import cupy as np
+    else:
+        import numpy as np
 
     image = gimage
     init_level_set = _init_level_set(init_level_set, image.shape)
@@ -518,13 +527,13 @@ def morphological_geodesic_active_contour(gimage, iterations,
     if threshold == 'auto':
         threshold = np.percentile(image, 40)
 
-    structure = np.ones((3,) * len(image.shape), dtype=np.int8)
+    structure = np.ones((3,) * len(image.shape), dtype="int8")
     dimage = np.gradient(image)
     # threshold_mask = image > threshold
     if balloon != 0:
         threshold_mask_balloon = image > threshold / np.abs(balloon)
 
-    u = np.int8(init_level_set > 0)
+    u = (init_level_set > 0).astype('int8')
 
     iter_callback(u)
 
